@@ -1,0 +1,43 @@
+services:
+  app:
+    build: .
+    ports:
+      - "${LOCAL_NODE_PORT}:${DOCKER_NODE_PORT}"
+    env_file: .env
+    environment:
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY}
+      DB_HOST: ${DB_HOST}
+      DB_PORT: ${DB_PORT}
+      DB_NAME: ${DB_NAME}
+      DB_USERNAME: ${DB_USERNAME}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DIALECT: ${DIALECT}
+      CORS_ORIGIN: ${CORS_ORIGIN}
+    networks:
+      - docker-network
+      
+  db:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: ${DB_USERNAME}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
+    ports:
+      - "${LOCAL_DB_PORT}:5432"
+
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - docker-network
+
+networks:
+  docker-network:
+    driver: bridge
+
+volumes:
+  postgres-data:
