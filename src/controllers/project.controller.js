@@ -383,51 +383,47 @@ module.exports = {
   },
 
   async deleteProject(request, response) {
-    const { id: projectId } = request.params;
+    const { id } = request.params;
     const userId = request.userId;
 
-    const t = await sequelize.transaction({
-      isolationLevel: sequelize.Transaction.ISOLATION_LEVELS.SERIALIZABLE,
-    });
+    const transaction = await sequelize.transaction();
 
     try {
-      const project = await Project.findByPk(projectId);
+      const project = await Project.findByPk(id);
       if (!project) {
-        await t.rollback();
+        await transaction.rollback();
         return response.status(404).json({ message: "Projeto não encontrado" });
       }
       if (project.creatorId !== userId) {
-        await t.rollback();
+        await transaction.rollback();
         return response
           .status(403)
           .json({ message: "Apenas o criador pode excluir o projeto" });
       }
 
       const brainstormings = await Brainstorming.findAll({
-        where: { projectId },
-        transaction: t,
+        where: { id },
+        transaction,
       });
 
       if (brainstormings.length > 0) {
         await t.rollback();
-        return response
-          .status(400)
-          .json({
-            message:
-              "Não é possivel remover projeto, pois há brainstorms associadas. Remova primeiro as brainstorms.",
-            hasBrainstormings: true,
-          });
+        return response.status(400).json({
+          message:
+            "Não é possivel remover projeto, pois há brainstorms associadas. Remova primeiro as brainstorms.",
+          hasBrainstormings: true,
+        });
       }
 
       const projectUsers = await ProjectUser.findAll({
-        where: { projectId },
+        where: { id },
         attributes: ["memberEmail", "fullName"],
-        transaction: t,
+        transaction,
       });
 
-      await UserStories.destroy({ where: { projectId }, transaction: t });
-      await ProjectUser.destroy({ where: { projectId }, transaction: t });
-      await Project.destroy({ where: { projectId }, transaction: t });
+      await UserStories.destroy({ where: { id }, transaction });
+      await ProjectUser.destroy({ where: { id }, transaction });
+      await Project.destroy({ where: { id }, transaction });
 
       for (const member of projectUsers) {
         try {
@@ -448,12 +444,12 @@ module.exports = {
           );
         }
       }
-      await t.commit();
+      await transaction.commit();
       return response
         .status(200)
         .json({ message: "Projeto excluido com sucesso." });
     } catch (error) {
-      if (!t.finished) await t.rollback();
+      if (!transaction.finished) await transaction.rollback();
       return response.status(500).json({ message: error.message });
     }
   },
@@ -471,11 +467,9 @@ module.exports = {
       }
 
       if (project.creatorId !== request.userId) {
-        return response
-          .status(403)
-          .json({
-            message: "Somente o criador do projeto pode atualizar o projeto",
-          });
+        return response.status(403).json({
+          message: "Somente o criador do projeto pode atualizar o projeto",
+        });
       }
 
       const [updated] = await Project.update(
@@ -659,11 +653,9 @@ module.exports = {
       }
 
       if (project.creatorId !== userId) {
-        return response
-          .status(403)
-          .json({
-            message: "Apenas o criador do projeto pode remover membros",
-          });
+        return response.status(403).json({
+          message: "Apenas o criador do projeto pode remover membros",
+        });
       }
 
       const deleted = await ProjectUser.destroy({
@@ -703,12 +695,10 @@ module.exports = {
         project.creatorId !== userId &&
         requesterMembership.roleInProject === "Participante"
       ) {
-        return response
-          .status(403)
-          .json({
-            message:
-              "Apenas o criador ou moderador do projeto pode adicionar membros",
-          });
+        return response.status(403).json({
+          message:
+            "Apenas o criador ou moderador do projeto pode adicionar membros",
+        });
       }
 
       const user = await User.findOne({ where: { email: memberEmail } });
@@ -759,12 +749,10 @@ module.exports = {
           );
         }
 
-        return response
-          .status(201)
-          .json({
-            message: "Convite enviado (usuário não cadastrado)",
-            projectLinkCreateAccount,
-          });
+        return response.status(201).json({
+          message: "Convite enviado (usuário não cadastrado)",
+          projectLinkCreateAccount,
+        });
       }
 
       const existingMember = await ProjectUser.findOne({
@@ -782,12 +770,10 @@ module.exports = {
           ? requesterMembership.roleInProject
           : "Participante";
       if (finalRole !== "Participante") {
-        return response
-          .status(400)
-          .json({
-            message:
-              "Função inválida. Apenas 'Participante' pode ser atribuída via convite.",
-          });
+        return response.status(400).json({
+          message:
+            "Função inválida. Apenas 'Participante' pode ser atribuída via convite.",
+        });
       }
 
       const userCreateProject = await ProjectUser.create({
@@ -855,12 +841,10 @@ module.exports = {
       }
 
       if (project.creatorId !== userId) {
-        return response
-          .status(403)
-          .json({
-            message:
-              "Apenas o criador do projeto pode atualizar funções de membros",
-          });
+        return response.status(403).json({
+          message:
+            "Apenas o criador do projeto pode atualizar funções de membros",
+        });
       }
 
       let projectMember;
@@ -885,12 +869,9 @@ module.exports = {
       }
 
       if (roleInProject === "Moderador") {
-        return response
-          .status(400)
-          .json({
-            message:
-              "Função inválida. Apenas 'Participante' pode ser atribuída.",
-          });
+        return response.status(400).json({
+          message: "Função inválida. Apenas 'Participante' pode ser atribuída.",
+        });
       }
 
       projectMember.roleInProject = roleInProject;
