@@ -37,15 +37,15 @@ class Project extends Model {
           unique: true,
           validate: {
             notNull: {
-              msg: "The project name field cannot be empty",
+              msg: "O nome do projeto não pode ser vazio",
             },
             notEmpty: {
-              msg: "The project name field cannot be empty",
+              msg: "O nome do projeto não pode ser vazio",
             },
             len(value) {
               if (value && value.trim().length < 5) {
                 throw new Error(
-                  "The project name must be at least 5 characters long",
+                  "O nome do projeto deve ter pelo menos 5 caracteres",
                 );
               }
             },
@@ -55,7 +55,9 @@ class Project extends Model {
                 value.trim().length > 5 &&
                 !/^[\p{L}0-9!@#$%^&*ç()_\-+=[\]{}\\|:;'"<> ]+$/iu.test(value)
               ) {
-                throw new Error("The project name contains invalid characters");
+                throw new Error(
+                  "O nome do projeto contém caracteres inválidos",
+                );
               }
             },
           },
@@ -68,24 +70,33 @@ class Project extends Model {
           allowNull: true,
           validate: {
             len(value) {
-              if (value && value.trim().length < 5) {
-                throw new Error(
-                  "The description must be at least 5 characters long",
-                );
+              if (
+                typeof value === "string" &&
+                value.trim().length > 0 &&
+                value.trim().length < 5
+              ) {
+                throw new Error("A descrição deve ter pelo menos 5 caracteres");
               }
             },
             containsInvalidCharacters(value) {
               if (
-                value &&
+                typeof value === "string" &&
                 value.trim().length > 5 &&
-                !/^[\p{L}0-9!@#$%^&*ç()_\-+=[\]{}\\|:;'"<> ]+$/iu.test(value)
+                !/^[\p{L}0-9!@#$%^&*ç()_\-+=[\]{}\\|:;"'<> ]+$/iu.test(
+                  value.trim(),
+                )
               ) {
-                throw new Error("The description contains invalid characters");
+                throw new Error("A descrição contém caracteres inválidos");
               }
             },
           },
           set(value) {
-            this.setDataValue("description", value.trim());
+            this.setDataValue(
+              "description",
+              typeof value === "string" && value.trim().length > 0
+                ? value.trim()
+                : null,
+            );
           },
         },
         creatorId: {

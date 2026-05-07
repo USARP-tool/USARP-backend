@@ -16,13 +16,43 @@ module.exports = {
     const { projectName, description, projectTeam } = request.body;
     const creatorId = request.userId;
 
+    if (!projectName || projectName.trim().length < 5) {
+      return response.status(400).json({
+        message: "O nome do projeto deve ter pelo menos 5 caracteres.",
+      });
+    }
+
+    if (
+      typeof description === "string" &&
+      description.trim().length > 0 &&
+      description.trim().length < 5
+    ) {
+      return response.status(400).json({
+        message:
+          "A descrição deve ter pelo menos 5 caracteres quando informada.",
+      });
+    }
+
+    const normalizedDescription =
+      typeof description === "string" && description.trim().length > 0
+        ? description.trim()
+        : null;
+
+    // Check for duplicate emails in projectTeam
+    const emails = projectTeam.map((member) => member.email);
+    if (emails.length !== new Set(emails).size) {
+      return response
+        .status(400)
+        .json({ message: "Emails duplicados na equipe do projeto." });
+    }
+
     const t = await sequelize.transaction({
       isolationLevel: Sequelize.Transaction.ISOLATION_LEVELS.SERIALIZABLE,
     });
 
     try {
       const project = await Project.create(
-        { projectName, description, creatorId },
+        { projectName, description: normalizedDescription, creatorId },
         { transaction: t },
       );
 
@@ -49,9 +79,7 @@ module.exports = {
 
         if (!user) {
           await t.rollback();
-          return response.status(400).json({
-            message: `User with email '${email}' not found.`,
-          });
+          throw new Error(`Usuário com e-mail '${email}' não existe.`);
         }
 
         const existingMember = await ProjectUser.findOne({
@@ -62,7 +90,7 @@ module.exports = {
         if (existingMember) {
           await t.rollback();
           return response.status(400).json({
-            message: `Email address '${email}' has already been invited to the project. Please enter a different email.`,
+            message: `O e-mail '${email}' já foi convidado para o projeto. Informe um e-mail diferente.`,
           });
         }
 
@@ -123,6 +151,13 @@ module.exports = {
         await t.rollback();
       }
 
+      if (error instanceof Sequelize.UniqueConstraintError) {
+        return response.status(400).json({
+          message: "Validation error",
+          errors: ["O nome do projeto já está em uso."],
+        });
+      }
+
       if (error instanceof ValidationError) {
         const validationErrors = error.errors.map((err) => err.message);
         return response.status(400).json({
@@ -130,6 +165,7 @@ module.exports = {
           errors: validationErrors,
         });
       }
+
       return response.status(500).json({ message: error.message });
     }
   },
@@ -462,6 +498,36 @@ module.exports = {
       const project = await Project.findByPk(projectId);
       const { projectName, description, status, projectTeam } = request.body;
 
+      if (!projectName || projectName.trim().length < 5) {
+        return response.status(400).json({
+          message: "O nome do projeto deve ter pelo menos 5 caracteres.",
+        });
+      }
+
+      if (
+        typeof description === "string" &&
+        description.trim().length > 0 &&
+        description.trim().length < 5
+      ) {
+        return response.status(400).json({
+          message:
+            "A descrição deve ter pelo menos 5 caracteres quando informada.",
+        });
+      }
+
+      const normalizedDescription =
+        typeof description === "string" && description.trim().length > 0
+          ? description.trim()
+          : null;
+
+      // Check for duplicate emails in projectTeam
+      const emails = projectTeam.map((member) => member.memberEmail);
+      if (emails.length !== new Set(emails).size) {
+        return response
+          .status(400)
+          .json({ message: "Emails duplicados na equipe do projeto." });
+      }
+
       if (!project) {
         return response.status(404).json({ message: "Projeto não encontrado" });
       }
@@ -472,10 +538,14 @@ module.exports = {
         });
       }
 
-      const [updated] = await Project.update(
-        { projectName, description, status },
-        { where: { id: projectId } },
-      );
+      const updateData = { projectName, status };
+      if (Object.prototype.hasOwnProperty.call(request.body, "description")) {
+        updateData.description = normalizedDescription;
+      }
+
+      const [updated] = await Project.update(updateData, {
+        where: { id: projectId },
+      });
 
       // membros atuais do banco
       const currentMembers = await ProjectUser.findAll({
@@ -526,7 +596,9 @@ module.exports = {
         });
 
         if (!user) {
-          throw new Error(`User with email '${member.memberEmail}' not found.`);
+          throw new Error(
+            `Usuário com e-mail '${member.memberEmail}' não existe.`,
+          );
         }
 
         await ProjectUser.create(
@@ -604,6 +676,13 @@ module.exports = {
     } catch (error) {
       await transaction.rollback();
       console.error(error);
+      if (error instanceof Sequelize.UniqueConstraintError) {
+        return response.status(400).json({
+          message: "Validation error",
+          errors: ["O nome do projeto já está em uso."],
+        });
+      }
+
       if (error instanceof ValidationError) {
         const validationErrors = error.errors
           ? error.errors.map((err) => err.message)
@@ -612,6 +691,7 @@ module.exports = {
           .status(400)
           .json({ message: "Validation error", errors: validationErrors });
       }
+
       return response.status(500).json({ message: error.message });
     }
   },
