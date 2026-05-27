@@ -39,7 +39,7 @@ BrainstormingRoutes.get(
 
 BrainstormingRoutes.post(
   "/brainstorming/assign-role",
-  BrainstormingController.assignRole
+  BrainstormingController.assignRole,
 );
 
 BrainstormingRoutes.patch(
@@ -53,33 +53,33 @@ BrainstormingRoutes.post(
 );
 
 BrainstormingRoutes.post(
-  "brainstormings/:brainstormingId/user-stories/:userStoryId/cards/:cardCode/notes",
+  "/brainstorming/:brainstormingId/user-stories/:userStoryId/cards/:cardCode/notes",
   BrainstormingController.createNote,
 );
 
 BrainstormingRoutes.put(
-  "brainstormings/:brainstormingId/user-stories/:userStoryId/cards/:cardCode/notes",
+  "/brainstorming/:brainstormingId/user-stories/:userStoryId/cards/:cardCode/notes",
   BrainstormingController.updateNote,
 );
 
 BrainstormingRoutes.get(
-  "brainstormings/:brainstormingId/user-stories/:userStoryId/cards/:cardCode/notes",
+  "/brainstorming/:brainstormingId/user-stories/:userStoryId/cards/:cardCode/notes",
   BrainstormingController.getNote,
 );
 
 BrainstormingRoutes.patch(
-  "/:brainstormingId/user-stories-order",
-  BrainstormingController.updateBrainstormingUserStoryOrder
+  "/brainstorming/:brainstormingId/user-stories-order",
+  BrainstormingController.updateBrainstormingUserStoryOrder,
 );
 
 BrainstormingRoutes.put(
-  "/:id",
-  BrainstormingController.updateBrainstorming
+  "/brainstorming/:id",
+  BrainstormingController.updateBrainstorming,
 );
 
 BrainstormingRoutes.get(
-  "/:brainstormingId/export",
-  BrainstormingController.exportBrainstormingResults
+  "/brainstorming/:brainstormingId/export",
+  BrainstormingController.exportBrainstormingResults,
 );
 
 module.exports = BrainstormingRoutes;
