@@ -16,13 +16,43 @@ module.exports = {
     const { projectName, description, projectTeam } = request.body;
     const creatorId = request.userId;
 
+    if (!projectName || projectName.trim().length < 5) {
+      return response.status(400).json({
+        message: "O nome do projeto deve ter pelo menos 5 caracteres.",
+      });
+    }
+
+    if (
+      typeof description === "string" &&
+      description.trim().length > 0 &&
+      description.trim().length < 5
+    ) {
+      return response.status(400).json({
+        message:
+          "A descrição deve ter pelo menos 5 caracteres quando informada.",
+      });
+    }
+
+    const normalizedDescription =
+      typeof description === "string" && description.trim().length > 0
+        ? description.trim()
+        : null;
+
+    // Check for duplicate emails in projectTeam
+    const emails = projectTeam.map((member) => member.email);
+    if (emails.length !== new Set(emails).size) {
+      return response
+        .status(400)
+        .json({ message: "Emails duplicados na equipe do projeto." });
+    }
+
     const t = await sequelize.transaction({
       isolationLevel: Sequelize.Transaction.ISOLATION_LEVELS.SERIALIZABLE,
     });
 
     try {
       const project = await Project.create(
-        { projectName, description, creatorId },
+        { projectName, description: normalizedDescription, creatorId },
         { transaction: t },
       );
 
@@ -49,9 +79,7 @@ module.exports = {
 
         if (!user) {
           await t.rollback();
-          return response.status(400).json({
-            message: `User with email '${email}' not found.`,
-          });
+          throw new Error(`Usuário com e-mail '${email}' não existe.`);
         }
 
         const existingMember = await ProjectUser.findOne({
@@ -62,7 +90,7 @@ module.exports = {
         if (existingMember) {
           await t.rollback();
           return response.status(400).json({
-            message: `Email address '${email}' has already been invited to the project. Please enter a different email.`,
+            message: `O e-mail '${email}' já foi convidado para o projeto. Informe um e-mail diferente.`,
           });
         }
 
@@ -123,6 +151,13 @@ module.exports = {
         await t.rollback();
       }
 
+      if (error instanceof Sequelize.UniqueConstraintError) {
+        return response.status(400).json({
+          message: "Validation error",
+          errors: ["O nome do projeto já está em uso."],
+        });
+      }
+
       if (error instanceof ValidationError) {
         const validationErrors = error.errors.map((err) => err.message);
         return response.status(400).json({
@@ -130,6 +165,7 @@ module.exports = {
           errors: validationErrors,
         });
       }
+
       return response.status(500).json({ message: error.message });
     }
   },
@@ -382,29 +418,27 @@ module.exports = {
   },
 
   async deleteProject(request, response) {
-    const { id: projectId } = request.params;
+    const { id } = request.params;
     const userId = request.userId;
 
-    const t = await sequelize.transaction({
-      isolationLevel: Sequelize.Transaction.ISOLATION_LEVELS.SERIALIZABLE,
-    });
+    const transaction = await sequelize.transaction();
 
     try {
-      const project = await Project.findByPk(projectId);
+      const project = await Project.findByPk(id);
       if (!project) {
-        await t.rollback();
+        await transaction.rollback();
         return response.status(404).json({ message: "Projeto não encontrado" });
       }
       if (project.creatorId !== userId) {
-        await t.rollback();
+        await transaction.rollback();
         return response
           .status(403)
           .json({ message: "Apenas o criador pode excluir o projeto" });
       }
 
       const brainstormings = await Brainstorming.findAll({
-        where: { projectId },
-        transaction: t,
+        where: { id },
+        transaction,
       });
 
       if (brainstormings.length > 0) {
@@ -417,14 +451,14 @@ module.exports = {
       }
 
       const projectUsers = await ProjectUser.findAll({
-        where: { projectId },
+        where: { id },
         attributes: ["memberEmail", "fullName"],
-        transaction: t,
+        transaction,
       });
 
-      await UserStories.destroy({ where: { projectId }, transaction: t });
-      await ProjectUser.destroy({ where: { projectId }, transaction: t });
-      await Project.destroy({ where: { projectId }, transaction: t });
+      await UserStories.destroy({ where: { id }, transaction });
+      await ProjectUser.destroy({ where: { id }, transaction });
+      await Project.destroy({ where: { id }, transaction });
 
       for (const member of projectUsers) {
         try {
@@ -445,21 +479,53 @@ module.exports = {
           );
         }
       }
-      await t.commit();
+      await transaction.commit();
       return response
         .status(200)
         .json({ message: "Projeto excluido com sucesso." });
     } catch (error) {
-      if (!t.finished) await t.rollback();
+      if (!transaction.finished) await transaction.rollback();
       return response.status(500).json({ message: error.message });
     }
   },
 
   async updateProject(request, response) {
+    const transaction = await sequelize.transaction();
+
     try {
       const projectId = request.params.id;
       const project = await Project.findByPk(projectId);
-      const { projectName, description, status } = request.body;
+      const { projectName, description, status, projectTeam } = request.body;
+
+      if (!projectName || projectName.trim().length < 5) {
+        return response.status(400).json({
+          message: "O nome do projeto deve ter pelo menos 5 caracteres.",
+        });
+      }
+
+      if (
+        typeof description === "string" &&
+        description.trim().length > 0 &&
+        description.trim().length < 5
+      ) {
+        return response.status(400).json({
+          message:
+            "A descrição deve ter pelo menos 5 caracteres quando informada.",
+        });
+      }
+
+      const normalizedDescription =
+        typeof description === "string" && description.trim().length > 0
+          ? description.trim()
+          : null;
+
+      // Check for duplicate emails in projectTeam
+      const emails = projectTeam.map((member) => member.memberEmail);
+      if (emails.length !== new Set(emails).size) {
+        return response
+          .status(400)
+          .json({ message: "Emails duplicados na equipe do projeto." });
+      }
 
       if (!project) {
         return response.status(404).json({ message: "Projeto não encontrado" });
@@ -471,11 +537,98 @@ module.exports = {
         });
       }
 
-      const [updated] = await Project.update(
-        { projectName, description, status },
-        { where: { id: projectId } },
-      );
+      const updateData = { projectName, status };
+      if (Object.prototype.hasOwnProperty.call(request.body, "description")) {
+        updateData.description = normalizedDescription;
+      }
 
+      const [updated] = await Project.update(updateData, {
+        where: { id: projectId },
+      });
+
+      // membros atuais do banco
+      const currentMembers = await ProjectUser.findAll({
+        where: { projectId },
+        transaction,
+      });
+
+      const currentMap = new Map(currentMembers.map((m) => [m.memberEmail, m]));
+
+      const incomingMap = new Map(projectTeam.map((m) => [m.memberEmail, m]));
+
+      const membersToCreate = [];
+      const membersToUpdate = [];
+      const membersToDelete = [];
+
+      // verificar quem entra ou atualiza
+      for (const incoming of projectTeam) {
+        const existing = currentMap.get(incoming.memberEmail);
+
+        if (!existing) {
+          membersToCreate.push({
+            projectId,
+            memberEmail: incoming.memberEmail,
+            roleInProject: incoming.roleInProject,
+          });
+        } else if (existing.roleInProject !== incoming.roleInProject) {
+          membersToUpdate.push({
+            id: existing.memberId,
+            roleInProject: incoming.roleInProject,
+          });
+        }
+      }
+
+      for (const existing of currentMembers) {
+        if (!incomingMap.has(existing.memberEmail)) {
+          if (existing.memberId === project.creatorId) {
+            throw new Error("O criador do projeto não pode ser removido.");
+          }
+          membersToDelete.push(existing.id);
+        }
+      }
+
+      // CREATE NEW MEMBERS
+      for (const member of membersToCreate) {
+        const user = await User.findOne({
+          where: { email: member.memberEmail },
+          transaction,
+        });
+
+        if (!user) {
+          throw new Error(
+            `Usuário com e-mail '${member.memberEmail}' não existe.`,
+          );
+        }
+
+        await ProjectUser.create(
+          {
+            projectId,
+            memberId: user.id,
+            fullName: user.fullName,
+            memberEmail: user.email,
+            roleInProject: member.roleInProject,
+          },
+          { transaction },
+        );
+      }
+
+      // UPDATE ROLE
+      for (const member of membersToUpdate) {
+        await ProjectUser.update(
+          { roleInProject: member.roleInProject },
+          { where: { memberId: member.id }, transaction },
+        );
+      }
+
+      // DELETE REMOVED MEMBERS
+      if (membersToDelete.length > 0) {
+        await ProjectUser.destroy({
+          where: { id: membersToDelete },
+          transaction,
+        });
+      }
+
+      await transaction.commit();
       if (projectName && projectName !== project.projectName) {
         const projectMembers = await ProjectUser.findAll({
           where: { projectId },
@@ -520,7 +673,15 @@ module.exports = {
         .status(200)
         .json({ message: "Projeto atualizado com sucesso" });
     } catch (error) {
+      await transaction.rollback();
       console.error(error);
+      if (error instanceof Sequelize.UniqueConstraintError) {
+        return response.status(400).json({
+          message: "Validation error",
+          errors: ["O nome do projeto já está em uso."],
+        });
+      }
+
       if (error instanceof ValidationError) {
         const validationErrors = error.errors
           ? error.errors.map((err) => err.message)
@@ -529,6 +690,7 @@ module.exports = {
           .status(400)
           .json({ message: "Validation error", errors: validationErrors });
       }
+
       return response.status(500).json({ message: error.message });
     }
   },
@@ -746,53 +908,49 @@ module.exports = {
 
   async updateProjectMemberRole(request, response) {
     try {
-      const id = request.params.id;
-      const memberIdUser = request.params.memberId;
-      const { roleInProject } = request.body;
+      const projectId = request.params.id;
+      const memberId = request.params.memberId;
+      const { memberEmail, roleInProject } = request.body;
       const userId = request.userId;
 
-      const project = await Project.findByPk(id);
+      const project = await Project.findByPk(projectId);
+
       if (!project) {
         return response.status(404).json({ message: "Projeto não encontrado" });
       }
 
-      const requesterRelation = await ProjectUser.findOne({
-        where: { projectId: id, memberId: userId },
-      });
-
-      const isOwner = project.creatorId === userId;
-      const isModerator =
-        requesterRelation && requesterRelation.roleInProject === "Moderador";
-
-      if (!isOwner && !isModerator) {
+      if (project.creatorId !== userId) {
         return response.status(403).json({
           message:
-            "Permissão negada. Apenas o Proprietário ou Moderadores podem alterar permissões.",
+            "Apenas o criador do projeto pode atualizar funções de membros",
         });
       }
 
-      if (isModerator) {
-        if (memberIdUser === userId) {
-          return response.status(403).json({
-            message: "Moderadores não podem alterar a própria permissão.",
-          });
-        }
-        if (memberIdUser === project.creatorId) {
-          return response.status(403).json({
-            message:
-              "Moderadores não podem alterar a permissão do Proprietário do projeto.",
-          });
-        }
+      let projectMember;
+      if (memberId) {
+        projectMember = await ProjectUser.findOne({
+          where: { projectId, memberId },
+        });
+      } else if (memberEmail) {
+        projectMember = await ProjectUser.findOne({
+          where: { projectId, memberEmail },
+        });
+      } else {
+        return response
+          .status(400)
+          .json({ message: "memberId or memberEmail is required." });
       }
-
-      const projectMember = await ProjectUser.findOne({
-        where: { projectId: id, memberId: memberIdUser },
-      });
 
       if (!projectMember) {
         return response
           .status(404)
           .json({ message: "Membro do projeto não encontrado" });
+      }
+
+      if (roleInProject === "Moderador") {
+        return response.status(400).json({
+          message: "Função inválida. Apenas 'Participante' pode ser atribuída.",
+        });
       }
 
       projectMember.roleInProject = roleInProject;
@@ -818,13 +976,15 @@ module.exports = {
       });
       const creatorProjects = await Project.findAll({
         where: { creatorId: userId },
-        attributes: ["id"],
+        attributes: ["projectId"],
       });
 
       const memberProjectsIds = projectMemberships.map(
         (membership) => membership.projectId,
       );
-      const creatorProjectsIds = creatorProjects.map((projects) => projects.id);
+      const creatorProjectsIds = creatorProjects.map(
+        (projects) => projects.projectId,
+      );
       const allProjectsIds = Array.from(
         new Set([...memberProjectsIds, ...creatorProjectsIds]),
       );
@@ -844,7 +1004,7 @@ module.exports = {
       };
 
       const order = [];
-      if (orderBy && (orderBy === "createdAt" || orderBy === "updatedAt")) {
+      if (orderBy && (orderBy === "createdAt" || orderBy === "updateAt")) {
         order.push([
           orderBy,
           orderDirection && orderDirection.toUpperCase() === "DESC"
