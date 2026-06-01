@@ -11,7 +11,6 @@ const { ValidationError } = require("sequelize");
 const { Op } = require("sequelize");
 const mailer = require("../config/mailer");
 
-
 module.exports = {
   async createProject(request, response) {
     const { projectName, description, projectTeam } = request.body;
@@ -336,10 +335,9 @@ module.exports = {
             return bData;
           });
 
-          const totalUserStoriesCount = brainstormings.reduce(
-            (acc, b) => acc + (b.userStories?.length || 0),
-            0,
-          );
+          const totalUserStoriesCount = await UserStories.count({
+            where: { projectId: project.id },
+          });
 
           const projectUsers = await ProjectUser.findAll({
             where: { projectId: project.id },
@@ -395,30 +393,38 @@ module.exports = {
       const project = await Project.findByPk(projectId);
       if (!project) {
         await t.rollback();
-        return response.status(404).json({ message: "Projeto não encontrado"});
+        return response.status(404).json({ message: "Projeto não encontrado" });
       }
       if (project.creatorId !== userId) {
         await t.rollback();
-        return response.status(403).json({ message: "Apenas o criador pode excluir o projeto"});
+        return response
+          .status(403)
+          .json({ message: "Apenas o criador pode excluir o projeto" });
       }
 
-      const brainstormings = await Brainstorming.findAll({where: {projectId}, transaction: t});
+      const brainstormings = await Brainstorming.findAll({
+        where: { projectId },
+        transaction: t,
+      });
 
       if (brainstormings.length > 0) {
         await t.rollback();
-        return response.status(400).json({ message: "Não é possivel remover projeto, pois há brainstorms associadas. Remova primeiro as brainstorms.", hasBrainstormings : true,
-        })
+        return response.status(400).json({
+          message:
+            "Não é possivel remover projeto, pois há brainstorms associadas. Remova primeiro as brainstorms.",
+          hasBrainstormings: true,
+        });
       }
 
       const projectUsers = await ProjectUser.findAll({
         where: { projectId },
         attributes: ["memberEmail", "fullName"],
-        transaction: t
+        transaction: t,
       });
 
-      await UserStories.destroy({ where: { projectId }, transaction: t});
-      await ProjectUser.destroy({ where: { projectId }, transaction: t});
-      await Project.destroy({ where: { projectId }, transaction: t});
+      await UserStories.destroy({ where: { projectId }, transaction: t });
+      await ProjectUser.destroy({ where: { projectId }, transaction: t });
+      await Project.destroy({ where: { projectId }, transaction: t });
 
       for (const member of projectUsers) {
         try {
@@ -429,18 +435,23 @@ module.exports = {
             subject: "Project deleted - USARP TOOL",
             context: {
               memberName: member.fullName,
-              projectName: project.projectName
-            }
-          })
+              projectName: project.projectName,
+            },
+          });
         } catch (emailError) {
-          console.error(`Error to invite mail for ${member.memberEmail}:`, emailError.message);
+          console.error(
+            `Error to invite mail for ${member.memberEmail}:`,
+            emailError.message,
+          );
         }
       }
       await t.commit();
-      return response.status(200).json({ message: "Projeto excluido com sucesso."});
+      return response
+        .status(200)
+        .json({ message: "Projeto excluido com sucesso." });
     } catch (error) {
       if (!t.finished) await t.rollback();
-      return response.status(500).json({ message: error.message});
+      return response.status(500).json({ message: error.message });
     }
   },
 
@@ -455,25 +466,25 @@ module.exports = {
       }
 
       if (project.creatorId !== request.userId) {
-        return response
-          .status(403)
-          .json({ message: "Somente o criador do projeto pode atualizar o projeto" });
+        return response.status(403).json({
+          message: "Somente o criador do projeto pode atualizar o projeto",
+        });
       }
 
       const [updated] = await Project.update(
         { projectName, description, status },
-        { where: { id: projectId } }
+        { where: { id: projectId } },
       );
 
       if (projectName && projectName !== project.projectName) {
         const projectMembers = await ProjectUser.findAll({
           where: { projectId },
-          attributes: ["memberEmail", "fullName"]
+          attributes: ["memberEmail", "fullName"],
         });
 
         const creator = await User.findOne({
           where: { id: request.userId },
-          attributes: ["fullName"]
+          attributes: ["fullName"],
         });
 
         for (const member of projectMembers) {
@@ -489,11 +500,14 @@ module.exports = {
                 newProjectName: projectName,
                 projectDescription: description || project.description,
                 projectStatus: status || project.status,
-                creatorName: creator.fullName
-              }
+                creatorName: creator.fullName,
+              },
             });
           } catch (emailError) {
-            console.error(`Erro ao enviar email para ${member.memberEmail}:`, emailError.message);
+            console.error(
+              `Erro ao enviar email para ${member.memberEmail}:`,
+              emailError.message,
+            );
           }
         }
       }
@@ -502,12 +516,18 @@ module.exports = {
         return response.status(404).json({ message: "Projeto não encontrado" });
       }
 
-      return response.status(200).json({ message: "Projeto atualizado com sucesso" });
+      return response
+        .status(200)
+        .json({ message: "Projeto atualizado com sucesso" });
     } catch (error) {
       console.error(error);
       if (error instanceof ValidationError) {
-        const validationErrors = error.errors ? error.errors.map((err) => err.message) : [error.message];
-        return response.status(400).json({ message: "Validation error", errors: validationErrors });
+        const validationErrors = error.errors
+          ? error.errors.map((err) => err.message)
+          : [error.message];
+        return response
+          .status(400)
+          .json({ message: "Validation error", errors: validationErrors });
       }
       return response.status(500).json({ message: error.message });
     }
@@ -519,7 +539,15 @@ module.exports = {
 
       const projectMembers = await ProjectUser.findAll({
         where: { projectId },
-        attributes: ["fullName", "memberEmail", "roleInProject", "organization", "profile", "memberId", "status"],
+        attributes: [
+          "fullName",
+          "memberEmail",
+          "roleInProject",
+          "organization",
+          "profile",
+          "memberId",
+          "status",
+        ],
       });
 
       return response.status(200).json({ members: projectMembers });
@@ -540,9 +568,11 @@ module.exports = {
       if (!project) {
         return response.status(404).json({ message: "Projeto não encontrado" });
       }
-      
+
       if (project.creatorId !== userId) {
-        return response.status(403).json({ message: "Apenas o criador do projeto pode remover membros" });
+        return response.status(403).json({
+          message: "Apenas o criador do projeto pode remover membros",
+        });
       }
 
       const deleted = await ProjectUser.destroy({
@@ -550,10 +580,14 @@ module.exports = {
       });
 
       if (!deleted) {
-        return response.status(404).json({ message: "Membro do projeto não encontrado" });
+        return response
+          .status(404)
+          .json({ message: "Membro do projeto não encontrado" });
       }
 
-      return response.status(200).json({ message: "Membro do projeto removido com sucesso" });
+      return response
+        .status(200)
+        .json({ message: "Membro do projeto removido com sucesso" });
     } catch (error) {
       console.error(error);
       return response.status(500).json({ message: error.message });
@@ -574,16 +608,25 @@ module.exports = {
         return response.status(404).json({ message: "Projeto não encontrado" });
       }
 
-      if (project.creatorId !== userId && requesterMembership.roleInProject === "Participante") {
-        return response.status(403).json({ message: "Apenas o criador ou moderador do projeto pode adicionar membros" });
+      if (
+        project.creatorId !== userId &&
+        requesterMembership.roleInProject === "Participante"
+      ) {
+        return response.status(403).json({
+          message:
+            "Apenas o criador ou moderador do projeto pode adicionar membros",
+        });
       }
 
       const user = await User.findOne({ where: { email: memberEmail } });
 
       if (!user) {
-        const projectLinkCreateAccount = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/auth/signup`;
+        const projectLinkCreateAccount = `${process.env.FRONTEND_URL || "http://localhost:3000"}/auth/signup`;
 
-        const finalRolePending = requesterMembership && requesterMembership.roleInProject ? requesterMembership.roleInProject : "Participante";
+        const finalRolePending =
+          requesterMembership && requesterMembership.roleInProject
+            ? requesterMembership.roleInProject
+            : "Participante";
 
         await ProjectUser.create({
           projectId,
@@ -595,8 +638,14 @@ module.exports = {
         });
 
         try {
-          const inviter = await User.findOne({ where: { id: userId }, attributes: ["fullName", "email"] });
-          const inviterName = inviter && inviter.fullName ? inviter.fullName : request.userEmail || "Um usuário";
+          const inviter = await User.findOne({
+            where: { id: userId },
+            attributes: ["fullName", "email"],
+          });
+          const inviterName =
+            inviter && inviter.fullName
+              ? inviter.fullName
+              : request.userEmail || "Um usuário";
 
           await mailer.sendMail({
             to: memberEmail,
@@ -611,21 +660,37 @@ module.exports = {
             },
           });
         } catch (emailError) {
-          console.error(`Erro ao enviar e-mail de convite para ${memberEmail}:`, emailError && emailError.message ? emailError.message : emailError);
+          console.error(
+            `Erro ao enviar e-mail de convite para ${memberEmail}:`,
+            emailError && emailError.message ? emailError.message : emailError,
+          );
         }
 
-        return response.status(201).json({ message: "Convite enviado (usuário não cadastrado)", projectLinkCreateAccount });
+        return response.status(201).json({
+          message: "Convite enviado (usuário não cadastrado)",
+          projectLinkCreateAccount,
+        });
       }
 
-      const existingMember = await ProjectUser.findOne({ where: { memberEmail, projectId } });
+      const existingMember = await ProjectUser.findOne({
+        where: { memberEmail, projectId },
+      });
 
       if (existingMember) {
-        return response.status(400).json({ message: "Usuário já é membro do projeto" });
+        return response
+          .status(400)
+          .json({ message: "Usuário já é membro do projeto" });
       }
 
-      const finalRole = requesterMembership && requesterMembership.roleInProject ? requesterMembership.roleInProject : "Participante";
+      const finalRole =
+        requesterMembership && requesterMembership.roleInProject
+          ? requesterMembership.roleInProject
+          : "Participante";
       if (finalRole !== "Participante") {
-        return response.status(400).json({ message: "Função inválida. Apenas 'Participante' pode ser atribuída via convite." });
+        return response.status(400).json({
+          message:
+            "Função inválida. Apenas 'Participante' pode ser atribuída via convite.",
+        });
       }
 
       const userCreateProject = await ProjectUser.create({
@@ -638,31 +703,41 @@ module.exports = {
       });
 
       if (userCreateProject) {
+        const inviter = await User.findOne({
+          where: { id: userId },
+          attributes: ["fullName", "email"],
+        });
+        const inviterName =
+          inviter && inviter.fullName
+            ? inviter.fullName
+            : request.userEmail || "Um usuário";
+        const projectLink = `${process.env.FRONTEND_URL || "http://localhost:3000"}/projects/${projectId}`;
+        // Deixei a variável FRONTEND_URL no .env apontando para a URL do frontend (ex: 'http://localhost:3000')
 
-          const inviter = await User.findOne({ where: { id: userId }, attributes: ["fullName", "email"] });
-          const inviterName = inviter && inviter.fullName ? inviter.fullName : request.userEmail || "Um usuário";
-          const projectLink = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/projects/${projectId}`;
-          // Deixei a variável FRONTEND_URL no .env apontando para a URL do frontend (ex: 'http://localhost:3000')
-
-          try {
-            await mailer.sendMail({
-              to: memberEmail,
-              from: "mailusarp@gmail.com",
-              template: "project_invite",
-              subject: "Você foi convidado para um projeto - USARP Tool",
-              context: {
-                memberName: user.fullName,
-                projectName: project.projectName,
-                inviterName,
-                projectLink
-              },
-            });
-          } catch (emailError) {
-            console.error(`Erro ao enviar e-mail de convite para ${memberEmail}:`, emailError && emailError.message ? emailError.message : emailError);
-          }
+        try {
+          await mailer.sendMail({
+            to: memberEmail,
+            from: "mailusarp@gmail.com",
+            template: "project_invite",
+            subject: "Você foi convidado para um projeto - USARP Tool",
+            context: {
+              memberName: user.fullName,
+              projectName: project.projectName,
+              inviterName,
+              projectLink,
+            },
+          });
+        } catch (emailError) {
+          console.error(
+            `Erro ao enviar e-mail de convite para ${memberEmail}:`,
+            emailError && emailError.message ? emailError.message : emailError,
+          );
         }
+      }
 
-      return response.status(201).json({ message: "Membro adicionado ao projeto com sucesso" });
+      return response
+        .status(201)
+        .json({ message: "Membro adicionado ao projeto com sucesso" });
     } catch (error) {
       console.error(error);
       return response.status(500).json({ message: error.message });
@@ -672,9 +747,9 @@ module.exports = {
   async updateProjectMemberRole(request, response) {
     try {
       const id = request.params.id;
-      const memberIdUser = request.params.memberId; 
+      const memberIdUser = request.params.memberId;
       const { roleInProject } = request.body;
-      const userId = request.userId; 
+      const userId = request.userId;
 
       const project = await Project.findByPk(id);
       if (!project) {
@@ -686,119 +761,129 @@ module.exports = {
       });
 
       const isOwner = project.creatorId === userId;
-      const isModerator = requesterRelation && requesterRelation.roleInProject === "Moderador";
+      const isModerator =
+        requesterRelation && requesterRelation.roleInProject === "Moderador";
 
       if (!isOwner && !isModerator) {
-        return response.status(403).json({ 
-            message: "Permissão negada. Apenas o Proprietário ou Moderadores podem alterar permissões." 
+        return response.status(403).json({
+          message:
+            "Permissão negada. Apenas o Proprietário ou Moderadores podem alterar permissões.",
         });
       }
 
       if (isModerator) {
         if (memberIdUser === userId) {
-             return response.status(403).json({ message: "Moderadores não podem alterar a própria permissão." });
+          return response.status(403).json({
+            message: "Moderadores não podem alterar a própria permissão.",
+          });
         }
         if (memberIdUser === project.creatorId) {
-             return response.status(403).json({ message: "Moderadores não podem alterar a permissão do Proprietário do projeto." });
+          return response.status(403).json({
+            message:
+              "Moderadores não podem alterar a permissão do Proprietário do projeto.",
+          });
         }
       }
 
-      const projectMember = await ProjectUser.findOne({ 
-        where: { projectId: id, memberId: memberIdUser } 
+      const projectMember = await ProjectUser.findOne({
+        where: { projectId: id, memberId: memberIdUser },
       });
 
       if (!projectMember) {
-        return response.status(404).json({ message: "Membro do projeto não encontrado" });
+        return response
+          .status(404)
+          .json({ message: "Membro do projeto não encontrado" });
       }
 
       projectMember.roleInProject = roleInProject;
       await projectMember.save();
 
-      return response.status(200).json({ message: "Função do membro atualizada com sucesso" });
-
+      return response
+        .status(200)
+        .json({ message: "Função do membro atualizada com sucesso" });
     } catch (error) {
       console.error(error);
       return response.status(500).json({ message: error.message });
     }
-},
+  },
 
-  async listProjects (request, response) {
+  async listProjects(request, response) {
     try {
       const userEmail = request.userEmail;
-      const userId = request.userId
+      const userId = request.userId;
 
       const projectMemberships = await ProjectUser.findAll({
         where: { memberEmail: userEmail },
-        attributes: ["projectId"]
-      })
+        attributes: ["projectId"],
+      });
       const creatorProjects = await Project.findAll({
-        where: { creatorId: userId},
-        attributes: ["id"]
-      })
+        where: { creatorId: userId },
+        attributes: ["id"],
+      });
 
       const memberProjectsIds = projectMemberships.map(
-        membership => membership.projectId
+        (membership) => membership.projectId,
       );
-      const creatorProjectsIds = creatorProjects.map(
-        projects => projects.id
-      )
-      const allProjectsIds = Array.from(new Set([...memberProjectsIds, ...creatorProjectsIds]))
+      const creatorProjectsIds = creatorProjects.map((projects) => projects.id);
+      const allProjectsIds = Array.from(
+        new Set([...memberProjectsIds, ...creatorProjectsIds]),
+      );
 
-      const {
-        offset,
-        limit,
-        status,
-        projectName,
-        orderBy,
-        orderDirection,
-      } = request.query;
+      const { offset, limit, status, projectName, orderBy, orderDirection } =
+        request.query;
 
       const offsetValue = offset ? parseInt(offset, 10) : 0;
-      const limitValue = limit ? parseInt(limit, 10): 10;
+      const limitValue = limit ? parseInt(limit, 10) : 10;
 
       const projectFilter = {
-      id: { [Op.in]: allProjectsIds },
-      ...(status ? { status } : {}),
-      ...(projectName ? { projectName: { [Op.like]: `%${projectName}%` } } : {}),
-    };
-
-    const order = [];
-    if (orderBy && (orderBy === 'createdAt' || orderBy === 'updatedAt')){
-      order.push([
-        orderBy,
-        orderDirection && orderDirection.toUpperCase() === 'DESC' ? 'DESC' : 'ASC',
-      ])
-    }
-
-    const { rows: projects, count: total} = await Project.findAndCountAll({
-      where: projectFilter,
-      offset: offsetValue,
-      limit: limitValue,
-      order: order.length > 0 ? order : undefined,
-    })
-
-    const formattedProjects = await Promise.all(projects.map(async (project)=>{
-      const projectData = project.toJSON();
-      return {
-        projectName: projectData.projectName,
-        creatorName: projectData.creator.fullName,
-        createdAt: projectData.createdAt,
-        canEdit: projectData.creatorId === userId,
-        canDelete: projectData.creatorId === userId,
+        id: { [Op.in]: allProjectsIds },
+        ...(status ? { status } : {}),
+        ...(projectName
+          ? { projectName: { [Op.like]: `%${projectName}%` } }
+          : {}),
       };
-    }));
 
-    return response.status(200).json({
-      projects: formattedProjects,
-      pagination: {
+      const order = [];
+      if (orderBy && (orderBy === "createdAt" || orderBy === "updatedAt")) {
+        order.push([
+          orderBy,
+          orderDirection && orderDirection.toUpperCase() === "DESC"
+            ? "DESC"
+            : "ASC",
+        ]);
+      }
+
+      const { rows: projects, count: total } = await Project.findAndCountAll({
+        where: projectFilter,
         offset: offsetValue,
         limit: limitValue,
-        total,
-      }});
+        order: order.length > 0 ? order : undefined,
+      });
 
+      const formattedProjects = await Promise.all(
+        projects.map(async (project) => {
+          const projectData = project.toJSON();
+          return {
+            projectName: projectData.projectName,
+            creatorName: projectData.creator.fullName,
+            createdAt: projectData.createdAt,
+            canEdit: projectData.creatorId === userId,
+            canDelete: projectData.creatorId === userId,
+          };
+        }),
+      );
+
+      return response.status(200).json({
+        projects: formattedProjects,
+        pagination: {
+          offset: offsetValue,
+          limit: limitValue,
+          total,
+        },
+      });
     } catch (error) {
       console.error(error);
-      return response.status(500).json({ message: error.message});
+      return response.status(500).json({ message: error.message });
     }
   },
 };
