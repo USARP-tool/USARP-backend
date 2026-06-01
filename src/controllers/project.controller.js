@@ -371,10 +371,9 @@ module.exports = {
             return bData;
           });
 
-          const totalUserStoriesCount = brainstormings.reduce(
-            (acc, b) => acc + (b.userStories?.length || 0),
-            0,
-          );
+          const totalUserStoriesCount = await UserStories.count({
+            where: { projectId: project.id },
+          });
 
           const projectUsers = await ProjectUser.findAll({
             where: { projectId: project.id },
