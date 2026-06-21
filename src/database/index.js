@@ -8,6 +8,7 @@ const ProjectModel = require("../models/project.model");
 const ProjectUserModel = require("../models/projectUser.model");
 const UserStoriesModel = require("../models/userStories.model");
 const BrainstormingUserStories = require("../models/brainstormingUserStories.model");
+const BrainstormingUserRole = require("../models/brainstormingUserRole.model");
 
 UserModel.init(connection);
 BrainstormingModel.init(connection);
@@ -15,6 +16,7 @@ ProjectModel.init(connection);
 ProjectUserModel.init(connection);
 UserStoriesModel.init(connection);
 BrainstormingUserStories.init(connection);
+BrainstormingUserRole.init(connection);
 
 UserModel.associate(connection.models);
 BrainstormingModel.associate(connection.models);
@@ -22,6 +24,7 @@ ProjectModel.associate(connection.models);
 ProjectUserModel.associate(connection.models);
 UserStoriesModel.associate(connection.models);
 BrainstormingUserStories.associate(connection.models);
+BrainstormingUserRole.associate(connection.models);
 
 module.exports = {
   sequelize: connection,
@@ -32,4 +35,5 @@ module.exports = {
   UserStories: connection.models.UserStories,
   ProjectUser: connection.models.ProjectUser,
   BrainstormingUserStories: connection.models.BrainstormingUserStories,
+  BrainstormingUserRole: connection.models.BrainstormingUserRole,
 };
