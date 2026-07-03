@@ -664,6 +664,41 @@ module.exports = {
     }
   },
 
+  async getBrainstorming(request, response) {
+    try {
+      const { brainstormingId } = request.params;
+
+      const brainstorming = await Brainstorming.findByPk(brainstormingId, {
+        include: [
+          {
+            model: UserStories,
+            as: "userStories",
+            through: {
+              model: BrainstormingUserStories,
+              attributes: ["checklist"],
+            },
+          },
+          {
+            model: Project,
+            as: "project",
+            attributes: ["id", "projectName"],
+          },
+        ],
+      });
+
+      if (!brainstorming) {
+        return response
+          .status(404)
+          .json({ message: "Brainstorming não encontrado." });
+      }
+
+      return response.status(200).json(brainstorming);
+    } catch (error) {
+      console.error("Erro ao obter brainstorming:", error.message);
+      return response.status(500).json({ message: "Internal server error" });
+    }
+  },
+
   async createNote(request, response) {
     try {
       const { brainstormingId, userStoryId, cardCode } = request.params;

@@ -1,5 +1,5 @@
 const { Model, DataTypes } = require("sequelize");
-const { USARP_CARD_MAPPING } = require('../config/usarpCardMapping'); 
+const { USARP_CARD_MAPPING } = require("../config/usarpCardMapping");
 
 class BrainstormingUserStories extends Model {
   static associate(models) {
@@ -24,6 +24,7 @@ class BrainstormingUserStories extends Model {
         brainstormingId: {
           type: DataTypes.UUID,
           allowNull: false,
+          primaryKey: true,
           field: "brainstorming_id",
           references: {
             model: "brainstormings",
@@ -35,6 +36,7 @@ class BrainstormingUserStories extends Model {
         userStoryId: {
           type: DataTypes.UUID,
           allowNull: false,
+          primaryKey: true,
           field: "user_story_id",
           references: {
             model: "user_stories",
@@ -44,7 +46,7 @@ class BrainstormingUserStories extends Model {
           onDelete: "CASCADE",
         },
         checklist: {
-          type: DataTypes.JSON, 
+          type: DataTypes.JSON,
           allowNull: true,
           defaultValue: null,
         },
@@ -52,7 +54,8 @@ class BrainstormingUserStories extends Model {
           type: DataTypes.INTEGER,
           allowNull: true,
           defaultValue: null,
-          comment: "Define a posição da US na fila de execução do brainstorming (1, 2, 3...)"
+          comment:
+            "Define a posição da US na fila de execução do brainstorming (1, 2, 3...)",
         },
         createdAt: {
           type: DataTypes.DATE,
@@ -71,59 +74,79 @@ class BrainstormingUserStories extends Model {
         tableName: "brainstorming_userstories",
         underscored: true,
         hooks: {
-
           afterCreate: async (record, options) => {
             const UserStories = sequelize.models.UserStories;
             if (!UserStories) return;
 
-            const count = await sequelize.models.BrainstormingUserStories.count({
+            const count = await sequelize.models.BrainstormingUserStories.count(
+              {
                 where: { userStoryId: record.userStoryId },
-                transaction: options.transaction
-            });
+                transaction: options.transaction,
+              },
+            );
 
             let newStatus;
             if (count === 1) {
-                newStatus = 'Associada a um brainstorming'; 
+              newStatus = "Associada a um brainstorming";
             } else if (count > 1) {
-                newStatus = 'Associada a vários brainstormings'; 
+              newStatus = "Associada a vários brainstormings";
             } else {
-                return;
+              return;
             }
 
             await UserStories.update(
-                { status: newStatus },
-                { where: { id: record.userStoryId }, transaction: options.transaction }
+              { status: newStatus },
+              {
+                where: { id: record.userStoryId },
+                transaction: options.transaction,
+              },
             );
           },
 
           beforeCreate: async (record, options) => {
             const Brainstorming = sequelize.models.Brainstorming;
             if (!Brainstorming) return;
-            const brainstorming = await Brainstorming.findByPk(record.brainstormingId);
+            const brainstorming = await Brainstorming.findByPk(
+              record.brainstormingId,
+            );
             if (!brainstorming) {
               throw new Error("Brainstorming not found for association.");
             }
-            if (["Bloqueado", "Concluído/Encerrado"].includes(brainstorming.status)) {
-              throw new Error("Não é possível associar histórias de usuário a um brainstorming com status 'Bloqueado' ou 'Concluído/Encerrado'.");
+            if (
+              ["Bloqueado", "Concluído/Encerrado"].includes(
+                brainstorming.status,
+              )
+            ) {
+              throw new Error(
+                "Não é possível associar histórias de usuário a um brainstorming com status 'Bloqueado' ou 'Concluído/Encerrado'.",
+              );
             }
           },
-          
+
           beforeBulkCreate: async (records, options) => {
             const Brainstorming = sequelize.models.Brainstorming;
             if (!Brainstorming) return;
-            const brainstormingIds = Array.from(new Set(records.map(r => r.brainstormingId)));
-            const brainstormings = await Brainstorming.findAll({ where: { id: brainstormingIds } });
-            const map = new Map(brainstormings.map(b => [b.id, b]));
+            const brainstormingIds = Array.from(
+              new Set(records.map((r) => r.brainstormingId)),
+            );
+            const brainstormings = await Brainstorming.findAll({
+              where: { id: brainstormingIds },
+            });
+            const map = new Map(brainstormings.map((b) => [b.id, b]));
             for (const rec of records) {
               const b = map.get(rec.brainstormingId);
               if (!b) {
-                throw new Error(`Brainstorming with id '${rec.brainstormingId}' not found for association.`);
+                throw new Error(
+                  `Brainstorming with id '${rec.brainstormingId}' not found for association.`,
+                );
               }
               if (["Bloqueado", "Concluído/Encerrado"].includes(b.status)) {
-                throw new Error("Não é possível associar histórias de usuário a um brainstorming com status 'Bloqueado' ou 'Concluído/Encerrado'.");
+                throw new Error(
+                  "Não é possível associar histórias de usuário a um brainstorming com status 'Bloqueado' ou 'Concluído/Encerrado'.",
+                );
               }
             }
-          }
+          },
         },
       },
     );
@@ -136,10 +159,10 @@ class BrainstormingUserStories extends Model {
    */
   static generateRecommendedCards(checklistData) {
     const ORDERED_MECHANISMS = [
-      'Feedback do sistema',
-      'Personalização do sistema',
-      'Controle e suporte ao usuário',
-      'Entrada de dados do usuário',
+      "Feedback do sistema",
+      "Personalização do sistema",
+      "Controle e suporte ao usuário",
+      "Entrada de dados do usuário",
     ];
 
     const recommendedCards = [];
@@ -149,15 +172,19 @@ class BrainstormingUserStories extends Model {
 
       if (selectedSubItems && selectedSubItems.length > 0) {
         recommendedCards.push({
-          type: 'MECANISMO_HEADER',
+          type: "MECANISMO_HEADER",
           name: mechanism,
           cards: [],
         });
 
-        const currentGroup = recommendedCards[recommendedCards.length - 1].cards;
+        const currentGroup =
+          recommendedCards[recommendedCards.length - 1].cards;
         selectedSubItems.forEach((subItem) => {
-          const subItemKey = subItem && typeof subItem === 'string' ? subItem.trim() : subItem;
-          const cardsToAppend = USARP_CARD_MAPPING[mechanism] && USARP_CARD_MAPPING[mechanism][subItemKey];
+          const subItemKey =
+            subItem && typeof subItem === "string" ? subItem.trim() : subItem;
+          const cardsToAppend =
+            USARP_CARD_MAPPING[mechanism] &&
+            USARP_CARD_MAPPING[mechanism][subItemKey];
 
           if (cardsToAppend && Array.isArray(cardsToAppend)) {
             currentGroup.push(...cardsToAppend);
@@ -169,6 +196,5 @@ class BrainstormingUserStories extends Model {
     return recommendedCards;
   }
 }
-
 
 module.exports = BrainstormingUserStories;

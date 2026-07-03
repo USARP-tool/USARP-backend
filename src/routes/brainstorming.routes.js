@@ -52,6 +52,11 @@ BrainstormingRoutes.post(
   BrainstormingController.startBrainstormingSession,
 );
 
+BrainstormingRoutes.get(
+  "/brainstorming/:brainstormingId",
+  BrainstormingController.getBrainstorming,
+);
+
 BrainstormingRoutes.post(
   "/brainstorming/:brainstormingId/user-stories/:userStoryId/cards/:cardCode/notes",
   BrainstormingController.createNote,
