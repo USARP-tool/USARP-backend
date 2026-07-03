@@ -722,13 +722,19 @@ module.exports = {
   async deleteProjectMember(request, response) {
     try {
       const projectId = request.params.id;
-      const memberId = request.body.memberId || request.params.memberId;
+      const memberId = request.params.memberId;
       const userId = request.userId;
 
       const project = await Project.findByPk(projectId);
 
       if (!project) {
         return response.status(404).json({ message: "Projeto não encontrado" });
+      }
+
+      if (project.creatorId === memberId) {
+        return response.status(400).json({
+          message: "O criador do projeto não pode ser removido como membro",
+        });
       }
 
       if (project.creatorId !== userId) {
