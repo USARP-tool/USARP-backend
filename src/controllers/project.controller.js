@@ -731,6 +731,12 @@ module.exports = {
         return response.status(404).json({ message: "Projeto não encontrado" });
       }
 
+      if (project.creatorId === memberId) {
+        return response.status(400).json({
+          message: "O criador do projeto não pode ser removido como membro",
+        });
+      }
+
       if (project.creatorId !== userId) {
         return response.status(403).json({
           message: "Apenas o criador do projeto pode remover membros",
