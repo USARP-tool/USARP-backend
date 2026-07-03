@@ -722,7 +722,7 @@ module.exports = {
   async deleteProjectMember(request, response) {
     try {
       const projectId = request.params.id;
-      const memberId = request.body.memberId || request.params.memberId;
+      const memberId = request.params.memberId;
       const userId = request.userId;
 
       const project = await Project.findByPk(projectId);
