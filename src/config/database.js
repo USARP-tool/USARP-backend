@@ -12,6 +12,9 @@ module.exports = {
     underscored: true,
   },
   dialectOptions: {
-    ssl: process.env.NODE_ENV === "production",
+    ssl: {
+      require: true,
+      rejectUnauthorized: false,
+    },
   },
 };
