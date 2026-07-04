@@ -11,4 +11,7 @@ module.exports = {
     timestamps: true,
     underscored: true,
   },
+  dialectOptions: {
+    ssl: process.env.NODE_ENV === "production",
+  },
 };
